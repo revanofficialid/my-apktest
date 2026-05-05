@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
@@ -24,7 +24,7 @@ jobs:
       - name: Install Cordova
         run: npm install -g cordova
         
-      - name: Build Cordova Project
+      - name: Build & Sign APK
         run: |
           export CI=true
           
@@ -41,29 +41,30 @@ jobs:
           cp ../source_files/config.xml .
           if [ -d "../source_files/res" ]; then cp -r ../source_files/res .; fi
           
-          cordova platform add android
+          # Gunakan versi Cordova Android 13 yang modern dan support SDK 34
+          cordova platform add android@13.0.0
           
-      - name: Build Release APK Manually using Gradle
-        run: |
-          cd app/platforms/android
-          ./gradlew assembleRelease
+          # Build APK resmi dari Cordova
+          cordova build android --release -- --packageType=apk
           
-      - name: Sign APK with Keystore
-        run: |
+          # Bikin Keystore Sementara
           keytool -genkey -v -keystore release.keystore -alias release -keyalg RSA -keysize 2048 -validity 10000 -storepass password123 -keypass password123 -dname "CN=Alat_Hitung,O=Developer,C=ID"
           
-          APK_FILE=$(find app/platforms/android/app/build/outputs/apk/release -name "*-unsigned.apk" | head -n 1)
+          # Cari file Unsigned APK yang baru saja dibuat
+          APK_FILE=$(find platforms/android/app/build/outputs/apk/release -name "*-unsigned.apk" | head -n 1)
           
+          # Fallback pencarian (Jaga-jaga jika path berubah)
           if [ -z "$APK_FILE" ]; then
-             echo "Error: Unsigned APK not found!"
-             exit 1
+             APK_FILE=$(find . -name "*.apk" | head -n 1)
           fi
           
           echo "Ditemukan APK: $APK_FILE"
           
+          # Zipalign (Syarat wajib untuk Play Protect)
           zipalign -v -p 4 "$APK_FILE" aligned.apk
           
-          apksigner sign --ks release.keystore --ks-pass pass:password123 --out Alat_Hitung-Signed.apk aligned.apk
+          # Sign APK Final
+          apksigner sign --ks release.keystore --ks-pass pass:password123 --out ../Alat_Hitung-Signed.apk aligned.apk
           
       - name: Upload Final Signed Artifact
         uses: actions/upload-artifact@v4
